@@ -108,37 +108,62 @@ def get_youtube_embed_url(url):
     # If no pattern matches, return original URL
     return url
 
-# Current video management functions
-def set_current_video(file_path, title):
-    """Set the current video to be played"""
-    with open('current_video.json', 'w', encoding='utf-8') as f:
-        json.dump({
-            'file_path': file_path,
-            'title': title,
-            'timestamp': datetime.now().isoformat()
-        }, f, ensure_ascii=False)
+# Current video management functions (Streamlit Cloud compatible)
+# Note: These functions now work with Streamlit session state passed from app.py
+# For backward compatibility, they also write to JSON file for local use
 
-def get_current_video():
+def set_current_video(file_path, title, session_state=None):
+    """Set the current video to be played"""
+    video_data = {
+        'file_path': file_path,
+        'title': title,
+        'timestamp': datetime.now().isoformat()
+    }
+    
+    # Use session state if available (Streamlit Cloud)
+    if session_state is not None:
+        session_state['current_video'] = video_data
+    
+    # Also write to file for backward compatibility (local use)
+    try:
+        with open('current_video.json', 'w', encoding='utf-8') as f:
+            json.dump(video_data, f, ensure_ascii=False)
+    except:
+        pass  # Ignore file errors on Streamlit Cloud
+
+def get_current_video(session_state=None):
     """Get the current video that should be playing"""
+    # Check session state first (Streamlit Cloud)
+    if session_state is not None and 'current_video' in session_state:
+        return session_state['current_video']
+    
+    # Fall back to file (local use)
     try:
         if os.path.exists('current_video.json'):
             with open('current_video.json', 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # Ensure the data has the minimum required fields
                 if data and isinstance(data, dict):
                     return data
-        return None
     except Exception as e:
         print(f"Error reading current video: {e}")
-        return None
+    
+    return None
 
-def clear_current_video():
+def clear_current_video(session_state=None):
     """Clear the current video"""
-    if os.path.exists('current_video.json'):
-        os.remove('current_video.json')
+    # Clear from session state (Streamlit Cloud)
+    if session_state is not None and 'current_video' in session_state:
+        del session_state['current_video']
+    
+    # Also clear file (local use)
+    try:
+        if os.path.exists('current_video.json'):
+            os.remove('current_video.json')
+    except:
+        pass
 
 # Check schedule once (synchronous - called from main app)
-def check_schedule_once():
+def check_schedule_once(session_state=None):
     """Check if any scheduled videos should play right now (non-blocking)"""
     try:
         current_time = datetime.now().strftime("%H:%M")
@@ -161,7 +186,7 @@ def check_schedule_once():
                 # Play the video
                 if file_type == 'youtube':
                     embed_url = get_youtube_embed_url(file_path)
-                    set_current_video(embed_url, title)
+                    set_current_video(embed_url, title, session_state)
                 elif file_type == 'local':
                     # For local files, still try to open (works only locally)
                     if os.path.exists(file_path):
@@ -170,7 +195,7 @@ def check_schedule_once():
                         else:
                             os.system(f'open "{file_path}"')
                 elif file_type == "html":
-                    set_current_video(f'file://{os.path.abspath(file_path)}', title)
+                    set_current_video(f'file://{os.path.abspath(file_path)}', title, session_state)
                 
                 # Update database with play time
                 c.execute('UPDATE schedules SET last_played = ? WHERE id = ?', (current_time, schedule_id))

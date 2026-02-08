@@ -90,8 +90,12 @@ if 'scheduler_started' not in st.session_state:
     # scheduler_thread.start()
     st.session_state.scheduler_started = True
 
+# Initialize current_video in session state (Streamlit Cloud compatible)
+if 'current_video' not in st.session_state:
+    st.session_state.current_video = None
+
 # Check schedule synchronously on every run (Streamlit Cloud compatible)
-check_schedule_once()
+check_schedule_once(st.session_state)
 # 편집 모드 세션 상태 초기화
 if 'editing_id' not in st.session_state:
     st.session_state.editing_id = None
@@ -112,7 +116,7 @@ def extract_youtube_id(url):
 st.title("🎬 비디오 스케줄러")
 
 # Check if there's a current video to play
-current_video = get_current_video()
+current_video = get_current_video(st.session_state)
 if current_video:
     # Handle both old format (url) and new format (file_path)
     video_url = current_video.get('file_path') or current_video.get('url', '')
@@ -151,13 +155,13 @@ if current_video:
         """
         components.html(youtube_embed, height=450)
         
-        if st.button("⏹️ 재생 중지", width='stretch'):
-            clear_current_video()
+        if st.button("⏹️ 재생 중지", use_container_width=True):
+            clear_current_video(st.session_state)
             st.rerun()
     else:
         st.error("유효하지 않은 YouTube URL입니다.")
-        if st.button("⏹️ 닫기", width='stretch'):
-            clear_current_video()
+        if st.button("⏹️ 닫기", use_container_width=True):
+            clear_current_video(st.session_state)
             st.rerun()
 
 st.markdown("---")
@@ -175,7 +179,7 @@ with tab1:
     with search_col2:
         st.write("")
         st.write("")
-        search_button = st.button("🔍 검색", type="primary", width='stretch')
+        search_button = st.button("🔍 검색", type="primary", use_container_width=True)
     
     # 검색 실행
     if search_button and search_query:
@@ -222,7 +226,7 @@ with tab1:
                     # 썸네일 표시
                     thumbnail_url = video['thumbnails'][0]['url'] if video.get('thumbnails') else ""
                     if thumbnail_url:
-                        st.image(thumbnail_url, width='stretch')
+                        st.image(thumbnail_url, use_container_width=True)
                 
                 with col2:
                     # 제목과 정보
@@ -239,8 +243,7 @@ with tab1:
                     with btn_col1:
                         if st.button(f"▶️ 재생", key=f"play_{idx}", type="primary"):
                             # Set as current video to play in the app
-                            from database.schedule_db import set_current_video
-                            set_current_video(video_url, video['title'])
+                            set_current_video(video_url, video['title'], st.session_state)
                             st.rerun()
                     with btn_col2:
                         if st.button(f"➕ 스케줄 추가", key=f"select_{idx}", type="secondary"):
@@ -268,7 +271,7 @@ with tab1:
                         
                         button_col1, button_col2 = st.columns(2)
                         with button_col1:
-                            if st.button("✅ 스케줄 추가", key=f"add_schedule_{idx}", type="primary", width='stretch'):
+                            if st.button("✅ 스케줄 추가", key=f"add_schedule_{idx}", type="primary", use_container_width=True):
                                 if schedule_title and schedule_time_input:
                                     add_schedule(schedule_time_input, video_url, "youtube", schedule_title)
                                     st.success(f"✅ '{schedule_title}' 스케줄이 {schedule_time_input}에 추가되었습니다!")
@@ -279,7 +282,7 @@ with tab1:
                                     st.error("⚠️ 제목과 시간을 모두 입력해주세요.")
                         
                         with button_col2:
-                            if st.button("❌ 취소", key=f"cancel_schedule_{idx}", width='stretch'):
+                            if st.button("❌ 취소", key=f"cancel_schedule_{idx}", use_container_width=True):
                                 st.session_state.selected_video = None
                                 st.rerun()
                 
@@ -306,7 +309,7 @@ with tab2:
         elif file_type == "html":
             file_path = st.text_input("HTML 파일 경로", placeholder="C:/path/to/file.html")
     
-    if st.button("➕ 스케줄 추가", type="primary", width='stretch'):
+    if st.button("➕ 스케줄 추가", type="primary", use_container_width=True):
         if title and file_path:
             time_str = schedule_time
             f_type = "youtube" if file_type == "YouTube URL" else "local" if file_type == "로컬 파일" else "html"
@@ -357,7 +360,7 @@ with tab3:
                     
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
-                        if st.button("💾 저장", key=f"save_{row['id']}", width='stretch', type="primary"):
+                        if st.button("💾 저장", key=f"save_{row['id']}", use_container_width=True, type="primary"):
                             f_type = "youtube" if edit_file_type == "YouTube URL" else "local"
                             
                             # 유효성 검사
@@ -375,7 +378,7 @@ with tab3:
                                 st.rerun()
                     
                     with btn_col2:
-                        if st.button("❌ 취소", key=f"cancel_{row['id']}", width='stretch'):
+                        if st.button("❌ 취소", key=f"cancel_{row['id']}", use_container_width=True):
                             st.session_state.editing_id = None
                             st.rerun()
                 
@@ -440,7 +443,8 @@ with st.sidebar:
     **참고사항:**
     - 페이지가 30초마다 자동으로 새로고침되어 스케줄을 체크합니다
     - 🟢 활성화된 스케줄만 재생됩니다
-    - 비디오 재생 중에는 60초마다 새로고침됩니다
+    - ▶️ 비디오 재생 중에는 자동 새로고침이 **중지**됩니다 (재시작 방지)
+    - 비디오를 중지하면 자동 새로고침이 다시 시작됩니다
     - Streamlit Cloud와 로컬 환경 모두에서 작동합니다
     """)
     
@@ -451,9 +455,10 @@ with st.sidebar:
         st.rerun()
 
 # Auto-refresh for Streamlit Cloud (non-blocking)
-# Only auto-refresh when no video is currently playing to avoid interruption
+# ONLY auto-refresh when no video is playing to check for scheduled videos
+# When a video IS playing, do NOT refresh to avoid restarting the video
 if not current_video:
-    # JavaScript auto-refresh every 30 seconds
+    # JavaScript auto-refresh every 30 seconds to check for scheduled videos
     components.html(
         """
         <script>
@@ -464,15 +469,4 @@ if not current_video:
         """,
         height=0
     )
-else:
-    # When video is playing, still refresh but less frequently  
-    components.html(
-        """
-        <script>
-            setTimeout(function() {
-                window.parent.location.reload();
-            }, 60000);
-        </script>
-        """,
-        height=0
-    )
+# If video is playing, no auto-refresh - user can manually stop video or refresh page
