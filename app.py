@@ -497,7 +497,8 @@ with st.sidebar:
     - 페이지가 30초마다 자동으로 새로고침되어 스케줄을 체크합니다
     - 🟢 활성화된 스케줄만 재생됩니다
     - ▶️ 비디오 재생 중에는 자동 새로고침이 **중지**됩니다 (재시작 방지)
-    - 비디오를 중지하면 자동 새로고침이 다시 시작됩니다
+    - ✏️ 스케줄 편집/추가 중에도 자동 새로고침이 **중지**됩니다 (데이터 손실 방지)
+    - 작업을 완료하면 자동 새로고침이 다시 시작됩니다
     - Streamlit Cloud와 로컬 환경 모두에서 작동합니다
     """)
     
@@ -508,9 +509,14 @@ with st.sidebar:
         st.rerun()
 
 # Auto-refresh for Streamlit Cloud (non-blocking)
-# ONLY auto-refresh when no video is playing to check for scheduled videos
-# When a video IS playing, do NOT refresh to avoid restarting the video
-if not current_video:
+# ONLY auto-refresh when:
+# - No video is playing (to avoid restarting video)
+# - Not editing a schedule (to avoid losing edits)
+# - Not adding a schedule from search results (to avoid losing form data)
+is_editing = st.session_state.get('editing_id') is not None
+is_adding_from_search = st.session_state.get('selected_video') is not None
+
+if not current_video and not is_editing and not is_adding_from_search:
     # JavaScript auto-refresh every 30 seconds to check for scheduled videos
     components.html(
         """
@@ -522,4 +528,4 @@ if not current_video:
         """,
         height=0
     )
-# If video is playing, no auto-refresh - user can manually stop video or refresh page
+# If video is playing or user is editing, no auto-refresh to avoid interruption
