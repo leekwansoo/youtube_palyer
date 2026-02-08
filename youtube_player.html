@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>스칸디나비아 스파 조용히 힐링을 위한 곳이지만...</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="5">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+        }
+        #player {
+            width: 100vw;
+            height: 100vh;
+        }
+        .info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: Arial, sans-serif;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <strong>현재 재생 중:</strong> 스칸디나비아 스파 조용히 힐링을 위한 곳이지만...<br>
+        <small>이 창을 닫지 마세요. 새 비디오가 자동으로 재생됩니다.</small>
+    </div>
+    <iframe id="player" 
+            src="https://www.youtube.com/embed/sTpZkJBa_Mo?autoplay=1&rel=0" 
+            frameborder="0" 
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+            allowfullscreen>
+    </iframe>
+    <script>
+        // 5초마다 새로운 비디오 확인을 위해 페이지 리로드
+        setTimeout(function() {
+            location.reload();
+        }, 5000);
+    </script>
+</body>
+</html>
