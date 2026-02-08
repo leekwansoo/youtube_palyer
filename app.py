@@ -96,6 +96,14 @@ if 'current_video' not in st.session_state:
 
 # Check schedule synchronously on every run (Streamlit Cloud compatible)
 check_schedule_once(st.session_state)
+
+# Debug info (will remove later)
+from datetime import datetime
+current_time = datetime.now().strftime("%H:%M")
+st.sidebar.markdown(f"**Debug Info:**")
+st.sidebar.caption(f"Current Time: {current_time}")
+st.sidebar.caption(f"Session Video: {st.session_state.get('current_video', 'None')}")
+
 # 편집 모드 세션 상태 초기화
 if 'editing_id' not in st.session_state:
     st.session_state.editing_id = None

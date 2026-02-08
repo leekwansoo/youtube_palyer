@@ -170,6 +170,9 @@ def check_schedule_once(session_state=None):
         conn = sqlite3.connect('video_schedule.db')
         c = conn.cursor()
         
+        # Debug logging
+        print(f"[DEBUG] Checking schedules at {current_time}")
+        
         # Find active schedules matching current time
         c.execute('''
             SELECT * FROM schedules 
@@ -177,15 +180,19 @@ def check_schedule_once(session_state=None):
         ''', (current_time,))
         
         schedules = c.fetchall()
+        print(f"[DEBUG] Found {len(schedules)} matching schedules")
         
         for schedule in schedules:
             schedule_id, _, file_path, file_type, title, _, _, last_played = schedule
+            print(f"[DEBUG] Processing schedule: {title}, last_played={last_played}")
             
             # Check if not already played this minute
             if last_played != current_time:
+                print(f"[DEBUG] Playing video: {title}")
                 # Play the video
                 if file_type == 'youtube':
                     embed_url = get_youtube_embed_url(file_path)
+                    print(f"[DEBUG] Setting video in session_state: {embed_url}")
                     set_current_video(embed_url, title, session_state)
                 elif file_type == 'local':
                     # For local files, still try to open (works only locally)
@@ -200,12 +207,17 @@ def check_schedule_once(session_state=None):
                 # Update database with play time
                 c.execute('UPDATE schedules SET last_played = ? WHERE id = ?', (current_time, schedule_id))
                 conn.commit()
+                print(f"[DEBUG] Updated last_played to {current_time}")
+            else:
+                print(f"[DEBUG] Already played at {last_played}, skipping")
         
         conn.close()
         return True
         
     except Exception as e:
         print(f"Schedule check error: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 # Background scheduler (legacy - kept for compatibility)
