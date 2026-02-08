@@ -155,12 +155,12 @@ if current_video:
         """
         components.html(youtube_embed, height=450)
         
-        if st.button("⏹️ 재생 중지", use_container_width=True):
+        if st.button("⏹️ 재생 중지", width='stretch'):
             clear_current_video(st.session_state)
             st.rerun()
     else:
         st.error("유효하지 않은 YouTube URL입니다.")
-        if st.button("⏹️ 닫기", use_container_width=True):
+        if st.button("⏹️ 닫기", width='stretch'):
             clear_current_video(st.session_state)
             st.rerun()
 
@@ -179,7 +179,7 @@ with tab1:
     with search_col2:
         st.write("")
         st.write("")
-        search_button = st.button("🔍 검색", type="primary", use_container_width=True)
+        search_button = st.button("🔍 검색", type="primary", width='stretch')
     
     # 검색 실행
     if search_button and search_query:
@@ -226,7 +226,7 @@ with tab1:
                     # 썸네일 표시
                     thumbnail_url = video['thumbnails'][0]['url'] if video.get('thumbnails') else ""
                     if thumbnail_url:
-                        st.image(thumbnail_url, use_container_width=True)
+                        st.image(thumbnail_url, width='stretch')
                 
                 with col2:
                     # 제목과 정보
@@ -271,7 +271,7 @@ with tab1:
                         
                         button_col1, button_col2 = st.columns(2)
                         with button_col1:
-                            if st.button("✅ 스케줄 추가", key=f"add_schedule_{idx}", type="primary", use_container_width=True):
+                            if st.button("✅ 스케줄 추가", key=f"add_schedule_{idx}", type="primary", width='stretch'):
                                 if schedule_title and schedule_time_input:
                                     add_schedule(schedule_time_input, video_url, "youtube", schedule_title)
                                     st.success(f"✅ '{schedule_title}' 스케줄이 {schedule_time_input}에 추가되었습니다!")
@@ -282,7 +282,7 @@ with tab1:
                                     st.error("⚠️ 제목과 시간을 모두 입력해주세요.")
                         
                         with button_col2:
-                            if st.button("❌ 취소", key=f"cancel_schedule_{idx}", use_container_width=True):
+                            if st.button("❌ 취소", key=f"cancel_schedule_{idx}", width='stretch'):
                                 st.session_state.selected_video = None
                                 st.rerun()
                 
@@ -309,7 +309,7 @@ with tab2:
         elif file_type == "html":
             file_path = st.text_input("HTML 파일 경로", placeholder="C:/path/to/file.html")
     
-    if st.button("➕ 스케줄 추가", type="primary", use_container_width=True):
+    if st.button("➕ 스케줄 추가", type="primary", width='stretch'):
         if title and file_path:
             time_str = schedule_time
             f_type = "youtube" if file_type == "YouTube URL" else "local" if file_type == "로컬 파일" else "html"
@@ -360,7 +360,7 @@ with tab3:
                     
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
-                        if st.button("💾 저장", key=f"save_{row['id']}", use_container_width=True, type="primary"):
+                        if st.button("💾 저장", key=f"save_{row['id']}", width='stretch', type="primary"):
                             f_type = "youtube" if edit_file_type == "YouTube URL" else "local"
                             
                             # 유효성 검사
@@ -378,7 +378,7 @@ with tab3:
                                 st.rerun()
                     
                     with btn_col2:
-                        if st.button("❌ 취소", key=f"cancel_{row['id']}", use_container_width=True):
+                        if st.button("❌ 취소", key=f"cancel_{row['id']}", width='stretch'):
                             st.session_state.editing_id = None
                             st.rerun()
                 
