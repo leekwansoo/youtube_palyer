@@ -97,12 +97,21 @@ if 'current_video' not in st.session_state:
 # Check schedule synchronously on every run (Streamlit Cloud compatible)
 check_schedule_once(st.session_state)
 
-# Debug info (will remove later)
-from datetime import datetime
-current_time = datetime.now().strftime("%H:%M")
-st.sidebar.markdown(f"**Debug Info:**")
-st.sidebar.caption(f"Current Time: {current_time}")
-st.sidebar.caption(f"Session Video: {st.session_state.get('current_video', 'None')}")
+# Timezone info for users
+if 'timezone_offset' not in st.session_state:
+    st.session_state.timezone_offset = 9  # Default to Seoul/Korea UTC+9
+
+# Debug info
+from datetime import datetime, timedelta
+utc_time = datetime.utcnow()
+local_time = utc_time + timedelta(hours=st.session_state.timezone_offset)
+current_utc = utc_time.strftime("%H:%M")
+current_local = local_time.strftime("%H:%M")
+
+st.sidebar.markdown(f"**⏰ Time Info:**")
+st.sidebar.caption(f"🌍 Server (UTC): {current_utc}")
+st.sidebar.caption(f"🏠 Your Time (UTC+{st.session_state.timezone_offset}): {current_local}")
+st.sidebar.caption(f"💡 Schedule videos using YOUR local time")
 
 # 편집 모드 세션 상태 초기화
 if 'editing_id' not in st.session_state:
@@ -119,6 +128,33 @@ def extract_youtube_id(url):
     youtube_regex = r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})'
     match = re.search(youtube_regex, url)
     return match.group(1) if match else None
+
+# Helper function to convert local time to UTC
+def local_to_utc(local_time_str, offset_hours):
+    """Convert local time string (HH:MM) to UTC time string"""
+    try:
+        from datetime import datetime, timedelta
+        # Parse the time
+        local_hour, local_minute = map(int, local_time_str.split(':'))
+        # Create a datetime object for today
+        local_dt = datetime.now().replace(hour=local_hour, minute=local_minute, second=0, microsecond=0)
+        # Convert to UTC
+        utc_dt = local_dt - timedelta(hours=offset_hours)
+        return utc_dt.strftime("%H:%M")
+    except:
+        return local_time_str
+
+# Helper function to convert UTC to local time
+def utc_to_local(utc_time_str, offset_hours):
+    """Convert UTC time string (HH:MM) to local time string"""
+    try:
+        from datetime import datetime, timedelta
+        utc_hour, utc_minute = map(int, utc_time_str.split(':'))
+        utc_dt = datetime.now().replace(hour=utc_hour, minute=utc_minute, second=0, microsecond=0)
+        local_dt = utc_dt + timedelta(hours=offset_hours)
+        return local_dt.strftime("%H:%M")
+    except:
+        return utc_time_str
 
 # UI
 st.title("🎬 비디오 스케줄러")
@@ -271,9 +307,9 @@ with tab1:
                             )
                         with schedule_col2:
                             schedule_time_input = st.text_input(
-                                "재생 시간 (HH:MM)", 
+                                "재생 시간 (서울 시간)", 
                                 value="12:00",
-                                help="24시간 형식으로 입력",
+                                help="24시간 형식 서울 시간으로 입력",
                                 key=f"schedule_time_{idx}"
                             )
                         
@@ -281,8 +317,10 @@ with tab1:
                         with button_col1:
                             if st.button("✅ 스케줄 추가", key=f"add_schedule_{idx}", type="primary", width='stretch'):
                                 if schedule_title and schedule_time_input:
-                                    add_schedule(schedule_time_input, video_url, "youtube", schedule_title)
-                                    st.success(f"✅ '{schedule_title}' 스케줄이 {schedule_time_input}에 추가되었습니다!")
+                                    # Convert local time to UTC
+                                    utc_time = local_to_utc(schedule_time_input, st.session_state.timezone_offset)
+                                    add_schedule(utc_time, video_url, "youtube", schedule_title)
+                                    st.success(f"✅ '{schedule_title}' 스케줄이 서울 시간 {schedule_time_input} (UTC {utc_time})에 추가되었습니다!")
                                     st.session_state.selected_video = None
                                     time_module.sleep(1)
                                     st.rerun()
@@ -305,7 +343,7 @@ with tab2:
     
     with col1:
         title = st.text_input("제목", placeholder="예: 아침 운동 영상", key="title_input")
-        schedule_time = st.text_input("재생 시간", value="12:00", help="HH:MM 형식으로 입력 (24시간제)", key="schedule_time_input")
+        schedule_time = st.text_input("재생 시간 (서울 시간)", value="12:00", help="HH:MM 형식으로 입력 (24시간제) - 서울 시간으로 입력하세요", key="schedule_time_input")
         
     with col2:
         file_type = st.radio("파일 유형", ["YouTube URL", "로컬 파일", "html"], horizontal=True)
@@ -319,7 +357,8 @@ with tab2:
     
     if st.button("➕ 스케줄 추가", type="primary", width='stretch'):
         if title and file_path:
-            time_str = schedule_time
+            # Convert local time to UTC
+            utc_time = local_to_utc(schedule_time, st.session_state.timezone_offset)
             f_type = "youtube" if file_type == "YouTube URL" else "local" if file_type == "로컬 파일" else "html"
             
             # 유효성 검사
@@ -331,8 +370,8 @@ with tab2:
                 st.warning("⚠️ 파일이 존재하지 않습니다. 경로를 확인해주세요.")
             
             if valid:
-                add_schedule(time_str, file_path, f_type, title)
-                st.success(f"✅ '{title}' 스케줄이 {time_str}에 추가되었습니다!")
+                add_schedule(utc_time, file_path, f_type, title)
+                st.success(f"✅ '{title}' 스케줄이 서울 시간 {schedule_time} (UTC {utc_time})에 추가되었습니다!")
                 st.rerun()
         else:
             st.error("⚠️ 제목과 파일 경로를 모두 입력해주세요.")
@@ -357,7 +396,9 @@ with tab3:
                     
                     with edit_col1:
                         edit_title = st.text_input("제목", value=row['title'], key=f"edit_title_{row['id']}")
-                        edit_time = st.text_input("재생 시간", value=row['schedule_time'], key=f"edit_time_{row['id']}")
+                        # Convert UTC to local for display
+                        local_time_display = utc_to_local(row['schedule_time'], st.session_state.timezone_offset)
+                        edit_time = st.text_input("재생 시간 (서울 시간)", value=local_time_display, key=f"edit_time_{row['id']}")
                     
                     with edit_col2:
                         current_file_type = "YouTube URL" if row['file_type'] == 'youtube' else "로컬 파일"
@@ -380,7 +421,9 @@ with tab3:
                                 st.warning("⚠️ 파일이 존재하지 않습니다. 경로를 확인해주세요.")
                             
                             if valid:
-                                update_schedule(row['id'], edit_time, edit_file_path, f_type, edit_title)
+                                # Convert local time to UTC
+                                utc_edit_time = local_to_utc(edit_time, st.session_state.timezone_offset)
+                                update_schedule(row['id'], utc_edit_time, edit_file_path, f_type, edit_title)
                                 st.session_state.editing_id = None
                                 st.success(f"✅ '{edit_title}' 스케줄이 수정되었습니다!")
                                 st.rerun()
@@ -399,7 +442,9 @@ with tab3:
                         st.write(f"{status} **{row['title']}**")
                     
                     with col2:
-                        st.write(f"🕐 {row['schedule_time']}")
+                        # Display time in local timezone
+                        local_time = utc_to_local(row['schedule_time'], st.session_state.timezone_offset)
+                        st.write(f"🕐 {local_time}")
                     
                     with col3:
                         file_type_display = "📺 YouTube" if row['file_type'] == 'youtube' else "📁 로컬"
