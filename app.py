@@ -116,7 +116,7 @@ if current_video:
     video_url = current_video.get('file_path') or current_video.get('url', '')
     video_title = current_video.get('title', 'Unknown Video')
     
-    st.success(f"▶️ 현재 재생 중: {video_title}")
+    st.success(f"▶️ 현재 재생 중: {video_title} URL: {video_url}")
     video_id = extract_youtube_id(video_url)
     if video_id:
         # Mobile-friendly responsive YouTube embed with autoplay

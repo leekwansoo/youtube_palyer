@@ -6,6 +6,7 @@ import time as time_module
 import os
 import json
 import re
+import webbrowser
 
 # 데이터베이스 초기화
 def init_db():
@@ -159,7 +160,8 @@ def check_schedule_once():
             if last_played != current_time:
                 # Play the video
                 if file_type == 'youtube':
-                    set_current_video(file_path, title)
+                    embed_url = get_youtube_embed_url(file_path)
+                    set_current_video(embed_url, title)
                 elif file_type == 'local':
                     # For local files, still try to open (works only locally)
                     if os.path.exists(file_path):
