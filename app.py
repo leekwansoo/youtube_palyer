@@ -19,7 +19,8 @@ from database.schedule_db import (
     is_youtube_url,
     get_current_video,
     clear_current_video,
-    set_current_video)
+    set_current_video,
+    check_schedule_once)
 
 # 페이지 설정
 st.set_page_config(
@@ -83,13 +84,14 @@ def check_schedule():
 if 'scheduler_started' not in st.session_state:
     st.session_state.scheduler_started = False
     init_db()
-    # 백그라운드 스케줄러 시작
-    scheduler_thread = threading.Thread(target=check_schedule, daemon=True)
-    scheduler_thread.start()
+    # 백그라운드 스케줄러 시작 (local only - unreliable on Streamlit Cloud)
+    # Instead, we'll check schedule synchronously on each app run
+    # scheduler_thread = threading.Thread(target=check_schedule, daemon=True)
+    # scheduler_thread.start()
     st.session_state.scheduler_started = True
-    # Sets a flag to prevent creating multiple threads. 
-    # Without this, every time Streamlit reruns (which happens often), 
-    # it would create a new scheduler thread, leading to duplicates.
+
+# Check schedule synchronously on every run (Streamlit Cloud compatible)
+check_schedule_once()
 # 편집 모드 세션 상태 초기화
 if 'editing_id' not in st.session_state:
     st.session_state.editing_id = None
@@ -436,18 +438,41 @@ with st.sidebar:
     - 모바일에서도 완벽하게 작동합니다
     
     **참고사항:**
-    - 백그라운드에서 60초마다 스케줄을 체크합니다
+    - 페이지가 30초마다 자동으로 새로고침되어 스케줄을 체크합니다
     - 🟢 활성화된 스케줄만 재생됩니다
-    - 비디오 재생 중에는 자동 새로고침이 중지됩니다
+    - 비디오 재생 중에는 60초마다 새로고침됩니다
+    - Streamlit Cloud와 로컬 환경 모두에서 작동합니다
     """)
     
     st.markdown("---")
-    st.info(f"🟢 스케줄러 실행 중")
+    st.info(f"🟢 스케줄러 실행 중 (Cloud-Ready)")
     
     if st.button("🔄 새로고침"):
         st.rerun()
 
-# Auto-refresh every 10 seconds to check for scheduled videos
-import time as time_module
-time_module.sleep(10)
-st.rerun()
+# Auto-refresh for Streamlit Cloud (non-blocking)
+# Only auto-refresh when no video is currently playing to avoid interruption
+if not current_video:
+    # JavaScript auto-refresh every 30 seconds
+    components.html(
+        """
+        <script>
+            setTimeout(function() {
+                window.parent.location.reload();
+            }, 30000);
+        </script>
+        """,
+        height=0
+    )
+else:
+    # When video is playing, still refresh but less frequently  
+    components.html(
+        """
+        <script>
+            setTimeout(function() {
+                window.parent.location.reload();
+            }, 60000);
+        </script>
+        """,
+        height=0
+    )
