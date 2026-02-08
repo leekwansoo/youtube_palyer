@@ -436,9 +436,8 @@ with st.sidebar:
     - 모바일에서도 완벽하게 작동합니다
     
     **참고사항:**
-    - 백그라운드에서 30초마다 스케줄을 체크합니다
+    - 백그라운드에서 60초마다 스케줄을 체크합니다
     - 🟢 활성화된 스케줄만 재생됩니다
-    - 대기 중일 때 20초마다 자동 새로고침됩니다
     - 비디오 재생 중에는 자동 새로고침이 중지됩니다
     """)
     
@@ -448,14 +447,7 @@ with st.sidebar:
     if st.button("🔄 새로고침"):
         st.rerun()
 
-# Auto-refresh only when NO video is playing (to detect scheduled videos)
-current_video_check = get_current_video()
-if not current_video_check:
-    st_autorefresh = """
-    <script>
-        setTimeout(function() {
-            window.parent.location.reload();
-        }, 20000);
-    </script>
-    """
-    components.html(st_autorefresh, height=0)
+# Auto-refresh every 10 seconds to check for scheduled videos
+import time as time_module
+time_module.sleep(10)
+st.rerun()
