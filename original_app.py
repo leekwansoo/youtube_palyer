@@ -1,36 +1,131 @@
 import streamlit as st
 import streamlit.components.v1 as components
+import sqlite3
+import pandas as pd
 from datetime import datetime, time
 import threading
 import time as time_module
 import os
 import json
 import re
-import sqlite3
 import scrapetube
 
-from database.schedule_db import (
-    init_db, 
-    add_schedule, 
-    get_schedules,
-    delete_schedule, 
-    update_schedule, 
-    toggle_schedule,
-    is_youtube_url,
-    get_current_video,
-    clear_current_video,
-    set_current_video)
-
 # 페이지 설정
-st.set_page_config(
-    page_title="비디오 스케줄러", 
-    page_icon="🎬", 
-    layout="wide",
-    initial_sidebar_state="auto",
-    menu_items={
-        'About': "📱 모바일 앱으로 사용 가능한 YouTube 비디오 스케줄러"
-    }
-)
+st.set_page_config(page_title="비디오 스케줄러", page_icon="🎬", layout="wide")
+
+# 데이터베이스 초기화
+def init_db():
+    conn = sqlite3.connect('video_schedule.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS schedules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            schedule_time TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            file_type TEXT NOT NULL,
+            title TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_played TEXT DEFAULT NULL
+        )
+    ''')
+    
+    # 기존 테이블에 last_played 컬럼 추가 (이미 있으면 무시)
+    try:
+        c.execute('ALTER TABLE schedules ADD COLUMN last_played TEXT DEFAULT NULL')
+        conn.commit()
+    except:
+        pass
+    
+    conn.close()
+
+# 스케줄 추가
+def add_schedule(schedule_time, file_path, file_type, title):
+    conn = sqlite3.connect('video_schedule.db')
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO schedules (schedule_time, file_path, file_type, title)
+        VALUES (?, ?, ?, ?)
+    ''', (schedule_time, file_path, file_type, title))
+    conn.commit()
+    conn.close()
+
+# 스케줄 조회
+def get_schedules():
+    conn = sqlite3.connect('video_schedule.db')
+    df = pd.read_sql_query("SELECT * FROM schedules ORDER BY schedule_time", conn)
+    conn.close()
+    return df
+
+# 스케줄 삭제
+def delete_schedule(schedule_id):
+    conn = sqlite3.connect('video_schedule.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+    conn.commit()
+    conn.close()
+
+# 스케줄 수정
+def update_schedule(schedule_id, schedule_time, file_path, file_type, title):
+    conn = sqlite3.connect('video_schedule.db')
+    c = conn.cursor()
+    c.execute('''
+        UPDATE schedules 
+        SET schedule_time = ?, file_path = ?, file_type = ?, title = ?
+        WHERE id = ?
+    ''', (schedule_time, file_path, file_type, title, schedule_id))
+    conn.commit()
+    conn.close()
+
+# 스케줄 활성화/비활성화
+def toggle_schedule(schedule_id, is_active):
+    conn = sqlite3.connect('video_schedule.db')
+    c = conn.cursor()
+    c.execute("UPDATE schedules SET is_active = ? WHERE id = ?", (is_active, schedule_id))
+    conn.commit()
+    conn.close()
+
+# YouTube URL 확인
+def is_youtube_url(url):
+    youtube_regex = (
+        r'(https?://)?(www\.)?'
+        '(youtube|youtu|youtube-nocookie)\.(com|be)/'
+        '(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})')
+    return re.match(youtube_regex, url) is not None
+
+# Helper function to extract YouTube video ID
+def extract_youtube_id(url):
+    youtube_regex = r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})'
+    match = re.search(youtube_regex, url)
+    return match.group(1) if match else None
+
+# Current video management functions
+def set_current_video(file_path, title):
+    """Set the current video to be played"""
+    with open('current_video.json', 'w', encoding='utf-8') as f:
+        json.dump({
+            'file_path': file_path,
+            'title': title,
+            'timestamp': datetime.now().isoformat()
+        }, f, ensure_ascii=False)
+
+def get_current_video():
+    """Get the current video that should be playing"""
+    try:
+        if os.path.exists('current_video.json'):
+            with open('current_video.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if data and isinstance(data, dict):
+                    return data
+        return None
+    except Exception as e:
+        print(f"Error reading current video: {e}")
+        return None
+
+def clear_current_video():
+    """Clear the current video"""
+    if os.path.exists('current_video.json'):
+        os.remove('current_video.json')
 
 # 비디오 재생 체크 (백그라운드)
 def check_schedule():
@@ -77,12 +172,13 @@ def check_schedule():
             print(f"스케줄 체크 오류: {e}")
         
         # 30초마다 체크
-        time_module.sleep(60)
+        time_module.sleep(30)
 
 # 세션 상태 초기화
 if 'scheduler_started' not in st.session_state:
     st.session_state.scheduler_started = False
     init_db()
+    
     # 백그라운드 스케줄러 시작
     scheduler_thread = threading.Thread(target=check_schedule, daemon=True)
     scheduler_thread.start()
@@ -100,12 +196,6 @@ if 'search_results' not in st.session_state:
 if 'selected_video' not in st.session_state:
     st.session_state.selected_video = None
 
-# Helper function to extract YouTube video ID
-def extract_youtube_id(url):
-    youtube_regex = r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})'
-    match = re.search(youtube_regex, url)
-    return match.group(1) if match else None
-
 # UI
 st.title("🎬 비디오 스케줄러")
 
@@ -119,42 +209,23 @@ if current_video:
     st.success(f"▶️ 현재 재생 중: {video_title}")
     video_id = extract_youtube_id(video_url)
     if video_id:
-        # Mobile-friendly responsive YouTube embed with autoplay
+        # Embed YouTube video with autoplay
         youtube_embed = f"""
-        <style>
-            .video-container {{
-                position: relative;
-                width: 100%;
-                padding-bottom: 56.25%; /* 16:9 aspect ratio */
-                height: 0;
-                overflow: hidden;
-            }}
-            .video-container iframe {{
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                border: none;
-            }}
-        </style>
-        <div class="video-container">
-            <iframe 
-                src="https://www.youtube.com/embed/{video_id}?autoplay=1&rel=0&modestbranding=1" 
+        <iframe width="100%" height="500" 
+                src="https://www.youtube.com/embed/{video_id}?autoplay=1&rel=0" 
                 frameborder="0" 
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
                 allowfullscreen>
-            </iframe>
-        </div>
+        </iframe>
         """
-        components.html(youtube_embed, height=450)
+        components.html(youtube_embed, height=500)
         
-        if st.button("⏹️ 재생 중지", width='stretch'):
+        if st.button("⏹️ 재생 중지"):
             clear_current_video()
             st.rerun()
     else:
         st.error("유효하지 않은 YouTube URL입니다.")
-        if st.button("⏹️ 닫기", width='stretch'):
+        if st.button("⏹️ 닫기"):
             clear_current_video()
             st.rerun()
 
@@ -173,7 +244,7 @@ with tab1:
     with search_col2:
         st.write("")
         st.write("")
-        search_button = st.button("🔍 검색", type="primary", width='stretch')
+        search_button = st.button("🔍 검색", type="primary", use_container_width=True)
     
     # 검색 실행
     if search_button and search_query:
@@ -220,7 +291,7 @@ with tab1:
                     # 썸네일 표시
                     thumbnail_url = video['thumbnails'][0]['url'] if video.get('thumbnails') else ""
                     if thumbnail_url:
-                        st.image(thumbnail_url, width='stretch')
+                        st.image(thumbnail_url, use_container_width=True)
                 
                 with col2:
                     # 제목과 정보
@@ -237,7 +308,6 @@ with tab1:
                     with btn_col1:
                         if st.button(f"▶️ 재생", key=f"play_{idx}", type="primary"):
                             # Set as current video to play in the app
-                            from database.schedule_db import set_current_video
                             set_current_video(video_url, video['title'])
                             st.rerun()
                     with btn_col2:
@@ -266,7 +336,7 @@ with tab1:
                         
                         button_col1, button_col2 = st.columns(2)
                         with button_col1:
-                            if st.button("✅ 스케줄 추가", key=f"add_schedule_{idx}", type="primary", width='stretch'):
+                            if st.button("✅ 스케줄 추가", key=f"add_schedule_{idx}", type="primary", use_container_width=True):
                                 if schedule_title and schedule_time_input:
                                     add_schedule(schedule_time_input, video_url, "youtube", schedule_title)
                                     st.success(f"✅ '{schedule_title}' 스케줄이 {schedule_time_input}에 추가되었습니다!")
@@ -277,7 +347,7 @@ with tab1:
                                     st.error("⚠️ 제목과 시간을 모두 입력해주세요.")
                         
                         with button_col2:
-                            if st.button("❌ 취소", key=f"cancel_schedule_{idx}", width='stretch'):
+                            if st.button("❌ 취소", key=f"cancel_schedule_{idx}", use_container_width=True):
                                 st.session_state.selected_video = None
                                 st.rerun()
                 
@@ -291,7 +361,7 @@ with tab2:
     col1, col2 = st.columns(2)
     
     with col1:
-        title = st.text_input("제목", placeholder="예: 아침 운동 영상", key="title_input")
+        title = st.text_input("제목", placeholder="예: 아침의 조용한 영상", key="title_input")
         schedule_time = st.text_input("재생 시간", value="12:00", help="HH:MM 형식으로 입력 (24시간제)", key="schedule_time_input")
         
     with col2:
@@ -304,7 +374,7 @@ with tab2:
         elif file_type == "html":
             file_path = st.text_input("HTML 파일 경로", placeholder="C:/path/to/file.html")
     
-    if st.button("➕ 스케줄 추가", type="primary", width='stretch'):
+    if st.button("➕ 스케줄 추가", type="primary", use_container_width=True):
         if title and file_path:
             time_str = schedule_time
             f_type = "youtube" if file_type == "YouTube URL" else "local" if file_type == "로컬 파일" else "html"
@@ -355,7 +425,7 @@ with tab3:
                     
                     btn_col1, btn_col2 = st.columns(2)
                     with btn_col1:
-                        if st.button("💾 저장", key=f"save_{row['id']}", width='stretch', type="primary"):
+                        if st.button("💾 저장", key=f"save_{row['id']}", use_container_width=True, type="primary"):
                             f_type = "youtube" if edit_file_type == "YouTube URL" else "local"
                             
                             # 유효성 검사
@@ -373,7 +443,7 @@ with tab3:
                                 st.rerun()
                     
                     with btn_col2:
-                        if st.button("❌ 취소", key=f"cancel_{row['id']}", width='stretch'):
+                        if st.button("❌ 취소", key=f"cancel_{row['id']}", use_container_width=True):
                             st.session_state.editing_id = None
                             st.rerun()
                 
@@ -430,16 +500,12 @@ with st.sidebar:
     2. YouTube URL 또는 로컬 파일 경로 입력
     3. 설정한 시간이 되면 자동으로 재생됩니다
     
-    **모바일 앱으로 사용:**
-    - 📱 YouTube 비디오는 **같은 페이지**에서 재생됩니다
-    - 새 창이나 탭이 열리지 않습니다
-    - 모바일에서도 완벽하게 작동합니다
-    
     **참고사항:**
     - 백그라운드에서 30초마다 스케줄을 체크합니다
     - 🟢 활성화된 스케줄만 재생됩니다
-    - 대기 중일 때 20초마다 자동 새로고침됩니다
-    - 비디오 재생 중에는 자동 새로고침이 중지됩니다
+    - YouTube 비디오는 앱 내에서 자동 재생됩니다
+    - 스케줄 시간이 되면 페이지 클릭/새로고침 시 자동 재생
+    - 수동 새로고침 버튼으로 언제든지 확인 가능
     """)
     
     st.markdown("---")
@@ -447,15 +513,3 @@ with st.sidebar:
     
     if st.button("🔄 새로고침"):
         st.rerun()
-
-# Auto-refresh only when NO video is playing (to detect scheduled videos)
-current_video_check = get_current_video()
-if not current_video_check:
-    st_autorefresh = """
-    <script>
-        setTimeout(function() {
-            window.parent.location.reload();
-        }, 20000);
-    </script>
-    """
-    components.html(st_autorefresh, height=0)

@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, time
 import time as time_module
 import os
-import webbrowser
+import json
 import re
 
 # 데이터베이스 초기화
@@ -87,7 +87,101 @@ def is_youtube_url(url):
         r'(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})')
     return re.match(youtube_regex, url) is not None
 
-# 비디오 재생 체크 (백그라운드)
+# YouTube URL을 embed URL로 변환
+def get_youtube_embed_url(url):
+    """Convert YouTube URL to embed format for iframe display"""
+    # Extract video ID from various YouTube URL formats
+    patterns = [
+        r'(?:https?://)?(?:www\.)?youtube\.com/watch\?v=([^&=%\?]{11})',
+        r'(?:https?://)?(?:www\.)?youtu\.be/([^&=%\?]{11})',
+        r'(?:https?://)?(?:www\.)?youtube\.com/embed/([^&=%\?]{11})',
+        r'(?:https?://)?(?:www\.)?youtube\.com/v/([^&=%\?]{11})'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            video_id = match.group(1)
+            return f'https://www.youtube.com/embed/{video_id}'
+    
+    # If no pattern matches, return original URL
+    return url
+
+# Current video management functions
+def set_current_video(file_path, title):
+    """Set the current video to be played"""
+    with open('current_video.json', 'w', encoding='utf-8') as f:
+        json.dump({
+            'file_path': file_path,
+            'title': title,
+            'timestamp': datetime.now().isoformat()
+        }, f, ensure_ascii=False)
+
+def get_current_video():
+    """Get the current video that should be playing"""
+    try:
+        if os.path.exists('current_video.json'):
+            with open('current_video.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # Ensure the data has the minimum required fields
+                if data and isinstance(data, dict):
+                    return data
+        return None
+    except Exception as e:
+        print(f"Error reading current video: {e}")
+        return None
+
+def clear_current_video():
+    """Clear the current video"""
+    if os.path.exists('current_video.json'):
+        os.remove('current_video.json')
+
+# Check schedule once (synchronous - called from main app)
+def check_schedule_once():
+    """Check if any scheduled videos should play right now (non-blocking)"""
+    try:
+        current_time = datetime.now().strftime("%H:%M")
+        conn = sqlite3.connect('video_schedule.db')
+        c = conn.cursor()
+        
+        # Find active schedules matching current time
+        c.execute('''
+            SELECT * FROM schedules 
+            WHERE schedule_time = ? AND is_active = 1
+        ''', (current_time,))
+        
+        schedules = c.fetchall()
+        
+        for schedule in schedules:
+            schedule_id, _, file_path, file_type, title, _, _, last_played = schedule
+            
+            # Check if not already played this minute
+            if last_played != current_time:
+                # Play the video
+                if file_type == 'youtube':
+                    set_current_video(file_path, title)
+                elif file_type == 'local':
+                    # For local files, still try to open (works only locally)
+                    if os.path.exists(file_path):
+                        if os.name == 'nt':
+                            os.startfile(file_path)
+                        else:
+                            os.system(f'open "{file_path}"')
+                elif file_type == "html":
+                    set_current_video(f'file://{os.path.abspath(file_path)}', title)
+                
+                # Update database with play time
+                c.execute('UPDATE schedules SET last_played = ? WHERE id = ?', (current_time, schedule_id))
+                conn.commit()
+        
+        conn.close()
+        return True
+        
+    except Exception as e:
+        print(f"Schedule check error: {e}")
+        return False
+
+# Background scheduler (legacy - kept for compatibility)
 def check_schedule():
     while True:
         try:
@@ -110,12 +204,13 @@ def check_schedule():
                 if last_played != current_time:
                     # 재생 처리
                     if file_type == 'youtube':
-                        webbrowser.open(file_path)
+                        embed_url = get_youtube_embed_url(file_path)
+                        set_current_video(embed_url, title)
                     elif file_type == 'local':
                         if os.path.exists(file_path):
                             os.startfile(file_path) if os.name == 'nt' else os.system(f'open "{file_path}"')
                     elif file_type == "html":
-                        webbrowser.open(f'file://{os.path.abspath(file_path)}')
+                        set_current_video(f'file://{os.path.abspath(file_path)}', title)
                     
                     # 데이터베이스에 재생 시간 업데이트
                     c.execute('UPDATE schedules SET last_played = ? WHERE id = ?', (current_time, schedule_id))
