@@ -261,4 +261,4 @@ def check_schedule():
             print(f"스케줄 체크 오류: {e}")
         
         # 30초마다 체크
-        time_module.sleep(30)
+        time_module.sleep(60)

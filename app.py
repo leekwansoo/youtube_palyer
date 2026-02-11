@@ -494,7 +494,7 @@ with st.sidebar:
     - 모바일에서도 완벽하게 작동합니다
     
     **참고사항:**
-    - 페이지가 30초마다 자동으로 새로고침되어 스케줄을 체크합니다
+    - 페이지가 60초마다 자동으로 새로고침되어 스케줄을 체크합니다
     - 🟢 활성화된 스케줄만 재생됩니다
     - ▶️ 비디오 재생 중에는 자동 새로고침이 **중지**됩니다 (재시작 방지)
     - ✏️ 스케줄 편집/추가 중에도 자동 새로고침이 **중지**됩니다 (데이터 손실 방지)
@@ -517,13 +517,13 @@ is_editing = st.session_state.get('editing_id') is not None
 is_adding_from_search = st.session_state.get('selected_video') is not None
 
 if not current_video and not is_editing and not is_adding_from_search:
-    # JavaScript auto-refresh every 30 seconds to check for scheduled videos
+    # JavaScript auto-refresh every 60 seconds to check for scheduled videos
     components.html(
         """
         <script>
             setTimeout(function() {
                 window.parent.location.reload();
-            }, 30000);
+            }, 60000);
         </script>
         """,
         height=0
