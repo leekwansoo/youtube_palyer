@@ -10,88 +10,21 @@ import json
 import re
 import scrapetube
 
+from database.schedule_db import (
+    init_db, 
+    add_schedule, 
+    get_schedules,
+    delete_schedule, 
+    update_schedule, 
+    toggle_schedule,
+    is_youtube_url,
+    get_current_video,
+    clear_current_video,
+    set_current_video,
+    check_schedule_once)
+
 # 페이지 설정
 st.set_page_config(page_title="비디오 스케줄러", page_icon="🎬", layout="wide")
-
-# 데이터베이스 초기화
-def init_db():
-    conn = sqlite3.connect('video_schedule.db')
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS schedules (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            schedule_time TEXT NOT NULL,
-            file_path TEXT NOT NULL,
-            file_type TEXT NOT NULL,
-            title TEXT,
-            is_active INTEGER DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_played TEXT DEFAULT NULL
-        )
-    ''')
-    
-    # 기존 테이블에 last_played 컬럼 추가 (이미 있으면 무시)
-    try:
-        c.execute('ALTER TABLE schedules ADD COLUMN last_played TEXT DEFAULT NULL')
-        conn.commit()
-    except:
-        pass
-    
-    conn.close()
-
-# 스케줄 추가
-def add_schedule(schedule_time, file_path, file_type, title):
-    conn = sqlite3.connect('video_schedule.db')
-    c = conn.cursor()
-    c.execute('''
-        INSERT INTO schedules (schedule_time, file_path, file_type, title)
-        VALUES (?, ?, ?, ?)
-    ''', (schedule_time, file_path, file_type, title))
-    conn.commit()
-    conn.close()
-
-# 스케줄 조회
-def get_schedules():
-    conn = sqlite3.connect('video_schedule.db')
-    df = pd.read_sql_query("SELECT * FROM schedules ORDER BY schedule_time", conn)
-    conn.close()
-    return df
-
-# 스케줄 삭제
-def delete_schedule(schedule_id):
-    conn = sqlite3.connect('video_schedule.db')
-    c = conn.cursor()
-    c.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
-    conn.commit()
-    conn.close()
-
-# 스케줄 수정
-def update_schedule(schedule_id, schedule_time, file_path, file_type, title):
-    conn = sqlite3.connect('video_schedule.db')
-    c = conn.cursor()
-    c.execute('''
-        UPDATE schedules 
-        SET schedule_time = ?, file_path = ?, file_type = ?, title = ?
-        WHERE id = ?
-    ''', (schedule_time, file_path, file_type, title, schedule_id))
-    conn.commit()
-    conn.close()
-
-# 스케줄 활성화/비활성화
-def toggle_schedule(schedule_id, is_active):
-    conn = sqlite3.connect('video_schedule.db')
-    c = conn.cursor()
-    c.execute("UPDATE schedules SET is_active = ? WHERE id = ?", (is_active, schedule_id))
-    conn.commit()
-    conn.close()
-
-# YouTube URL 확인
-def is_youtube_url(url):
-    youtube_regex = (
-        r'(https?://)?(www\.)?'
-        '(youtube|youtu|youtube-nocookie)\.(com|be)/'
-        '(watch\?v=|embed/|v/|.+\?v=)?([^&=%\?]{11})')
-    return re.match(youtube_regex, url) is not None
 
 # Helper function to extract YouTube video ID
 def extract_youtube_id(url):
@@ -99,33 +32,6 @@ def extract_youtube_id(url):
     match = re.search(youtube_regex, url)
     return match.group(1) if match else None
 
-# Current video management functions
-def set_current_video(file_path, title):
-    """Set the current video to be played"""
-    with open('current_video.json', 'w', encoding='utf-8') as f:
-        json.dump({
-            'file_path': file_path,
-            'title': title,
-            'timestamp': datetime.now().isoformat()
-        }, f, ensure_ascii=False)
-
-def get_current_video():
-    """Get the current video that should be playing"""
-    try:
-        if os.path.exists('current_video.json'):
-            with open('current_video.json', 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if data and isinstance(data, dict):
-                    return data
-        return None
-    except Exception as e:
-        print(f"Error reading current video: {e}")
-        return None
-
-def clear_current_video():
-    """Clear the current video"""
-    if os.path.exists('current_video.json'):
-        os.remove('current_video.json')
 
 # 비디오 재생 체크 (백그라운드)
 def check_schedule():
@@ -186,6 +92,10 @@ if 'scheduler_started' not in st.session_state:
     # Sets a flag to prevent creating multiple threads. 
     # Without this, every time Streamlit reruns (which happens often), 
     # it would create a new scheduler thread, leading to duplicates.
+# Initialize current_video in session state (Streamlit Cloud compatible)
+if 'current_video' not in st.session_state:
+    st.session_state.current_video = None    
+
 # 편집 모드 세션 상태 초기화
 if 'editing_id' not in st.session_state:
     st.session_state.editing_id = None
