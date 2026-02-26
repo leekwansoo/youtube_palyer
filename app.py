@@ -160,7 +160,7 @@ def utc_to_local(utc_time_str, offset_hours):
 st.title("🎬 비디오 스케줄러")
 
 # Check if there's a current video to play
-current_video = get_current_video(st.session_state)
+current_video = get_current_video()
 if current_video:
     # Handle both old format (url) and new format (file_path)
     video_url = current_video.get('file_path') or current_video.get('url', '')
